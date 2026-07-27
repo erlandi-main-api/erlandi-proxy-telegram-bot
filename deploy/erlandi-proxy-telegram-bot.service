@@ -1,0 +1,22 @@
+[Unit]
+Description=Erlandi Proxy Telegram Bot
+After=network-online.target 9router.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=erlandi-bot
+Group=erlandi-bot
+WorkingDirectory=/opt/erlandi-proxy-telegram-bot
+EnvironmentFile=/etc/erlandi-proxy-telegram-bot.env
+ExecStart=/usr/bin/node /opt/erlandi-proxy-telegram-bot/dist/src/index.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/erlandi-proxy-telegram-bot/data
+
+[Install]
+WantedBy=multi-user.target

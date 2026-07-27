@@ -1,0 +1,22 @@
+import { z } from "zod";
+import type { ApiKeyRecord, ModelGroup } from "./types.js";
+
+export class GatewayError extends Error { constructor(message:string, readonly status:number){super(message);} }
+export class GatewayClient {
+  constructor(private baseUrl:string, private token:string, private timeoutMs=10_000){this.baseUrl=baseUrl.replace(/\/$/,"");}
+  private async request<T>(path:string, init:RequestInit={}):Promise<T>{const signal=AbortSignal.timeout(this.timeoutMs);const res=await fetch(this.baseUrl+path,{...init,signal,headers:{"content-type":"application/json","x-9r-cli-token":this.token,...init.headers}});const data=await res.json().catch(()=>({}));if(!res.ok)throw new GatewayError(String(data.error?.message||data.error||data.message||`Gateway error ${res.status}`),res.status);return data as T;}
+  health(){return this.request<{ok:boolean}>("/api/health");}
+  async listKeys():Promise<ApiKeyRecord[]>{const d=await this.request<{keys:ApiKeyRecord[]}>("/api/keys");return Array.isArray(d.keys)?d.keys:[];}
+  async createKey(input:{name:string;key?:string;models?:string;tokenQuota?:string;expiresInDays?:string}):Promise<ApiKeyRecord>{return this.request<ApiKeyRecord>("/api/keys",{method:"POST",body:JSON.stringify(input)});}
+  async updateKey(id:string,input:Record<string,unknown>):Promise<ApiKeyRecord>{const d=await this.request<{key?:ApiKeyRecord}&ApiKeyRecord>(`/api/keys/${encodeURIComponent(id)}`,{method:"PUT",body:JSON.stringify(input)});return d.key??d;}
+  deleteKey(id:string){return this.request(`/api/keys/${encodeURIComponent(id)}`,{method:"DELETE"});}
+  async providers(){return this.request<{connections:unknown[]}>("/api/providers");}
+  async combos(){return this.request<{combos:unknown[]}>("/api/combos");}
+  async models(connectionId:string){return this.request<unknown>(`/api/providers/${encodeURIComponent(connectionId)}/models`);}
+  usageStats(){return this.request<Record<string,unknown>>("/api/usage/stats");}
+  usageHistory(){return this.request<Record<string,unknown>>("/api/usage/history");}
+  usageLogs(){return this.request<Record<string,unknown>>("/api/usage/request-logs");}
+  async modelGroups():Promise<ModelGroup[]>{const [providerData,comboData]=await Promise.all([this.providers(),this.combos()]);const connections=(Array.isArray(providerData.connections)?providerData.connections:[]).filter((x:any)=>x?.isActive!==false);const groups=new Map<string,ModelGroup>();for(const connection of connections as any[]){const provider=String(connection.provider||connection.id),name=String(connection.name||connection.providerName||provider);const group=groups.get(provider)||{id:provider,name,models:[]};try{const raw:any=await this.models(String(connection.id));const models=Array.isArray(raw?.models)?raw.models:Array.isArray(raw?.data)?raw.data:Array.isArray(raw?.results)?raw.results:Array.isArray(raw)?raw:[];for(const model of models){let id=String(typeof model==="string"?model:model?.id||model?.name||model?.model||"");if(!id)continue;if(!id.includes("/"))id=`${provider}/${id}`;if(!group.models.some(x=>x.id===id))group.models.push({id,name:String(typeof model==="string"?model:model?.name||model?.displayName||id),groupId:provider,groupName:name});}}catch{}group.models.sort((a,b)=>a.name.localeCompare(b.name));if(group.models.length)groups.set(provider,group);}
+    const combos=(Array.isArray((comboData as any).combos)?(comboData as any).combos:[]).filter((x:any)=>x?.name&&(!x.kind||x.kind==="llm"));if(combos.length)groups.set("combo",{id:"combo",name:"Combo",models:combos.map((x:any)=>({id:String(x.name),name:String(x.name),groupId:"combo",groupName:"Combo",isCombo:true,memberCount:Array.isArray(x.models)?x.models.length:0}))});return [...groups.values()].sort((a,b)=>a.id==="combo"?-1:b.id==="combo"?1:a.name.localeCompare(b.name));}
+}
+export const keyListSchema=z.object({keys:z.array(z.record(z.string(),z.unknown()))});
