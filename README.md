@@ -1,160 +1,328 @@
+<div align="center">
+
 # Erlandi Proxy Telegram Bot
 
-Bot Telegram production-ready untuk Erlandi Proxy dengan dua area terpisah:
+### Customer self-service dan operations console untuk AI gateway Anda
 
-- **Portal pelanggan universal** melalui `/start`
-- **Panel administrasi RBAC** melalui `/admin`
+Kelola API key, quota, model, Combo, monitoring, alert, dan pelanggan melalui Telegram—tanpa membuka dashboard di browser.
 
-Repository ini dirancang agar dapat dipasang ulang pada VPS baru tanpa bergantung pada konfigurasi server lama.
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![grammY](https://img.shields.io/badge/Telegram-grammY-26A5E4?logo=telegram&logoColor=white)](https://grammy.dev/)
+[![systemd](https://img.shields.io/badge/Deploy-systemd-000000?logo=linux&logoColor=white)](deploy/erlandi-proxy-telegram-bot.service)
+[![Repository](https://img.shields.io/badge/GitHub-Public-181717?logo=github)](https://github.com/erlandi-main-api/erlandi-proxy-telegram-bot)
+
+[Mulai Cepat](#-quick-start) · [Fitur](#-fitur) · [Arsitektur](#-arsitektur) · [Deployment](#-deployment-production) · [Keamanan](#-model-keamanan) · [Troubleshooting](#-troubleshooting)
+
+</div>
+
+---
+
+## Overview
+
+Erlandi Proxy Telegram Bot menyediakan dua pengalaman dalam satu bot:
+
+| Customer Portal | Admin Control |
+|---|---|
+| Universal melalui `/start` | Terproteksi RBAC melalui `/admin` |
+| Cek key tanpa registrasi Telegram | Kelola seluruh API key dan quota |
+| Status, quota, persentase, expiry | Create, edit, renew, pause, delete |
+| Model dan Combo yang diizinkan | Provider, Combo, usage, live monitor |
+| Panduan endpoint API | User roles, alerts, audit, export CSV |
+| API key tidak disimpan | Admin API memakai service token localhost |
+
+> **Prinsip utama:** portal publik tidak pernah menerima akses admin. Request quota publik tidak mengirim `x-9r-cli-token`, sedangkan operasi admin selalu melewati RBAC dan callback bertanda tangan.
+
+### Tampilan pelanggan
+
+```text
+Erlandi Proxy
+
+[ Cek Kuota API Key ]
+[ Panduan Penggunaan ] [ Hubungi Admin ]
+```
+
+```text
+Informasi API Key
+
+Nama: Client Premium
+Status: active
+
+Penggunaan Kuota
+Kuota awal: 1.000.000 token
+Terpakai: 250.000 token (25%)
+Tersisa: 750.000 token (75%)
+Progress: ███░░░░░░░ 25%
+
+Masa aktif: 30 Juli 2026
+Model & Combo: premium-combo, openai/gpt
+```
+
+### Tampilan admin
+
+```text
+Erlandi Proxy Control
+
+[ API Keys ]       [ All User Quota ]
+[ Monitoring ]     [ Providers & Models ]
+[ Usage ]          [ Alerts ]
+[ Users ]          [ Audit Log ]
+[ System ]
+```
 
 ## Fitur
 
-### Portal Pelanggan
+<table>
+<tr>
+<td width="50%" valign="top">
 
-Semua pengguna Telegram dapat membuka `/start` tanpa approval admin untuk:
+### Customer self-service
 
-- Memeriksa API key apa pun melalui tombol **Cek Kuota API Key**
-- Melihat status key, kuota awal, token terpakai, sisa token, persentase, dan progress bar
-- Melihat masa aktif serta model/Combo yang diizinkan
-- Membuka panduan penggunaan endpoint OpenAI-compatible
-- Menghubungi admin layanan
+- Cek API key apa pun dari inline menu
+- Kuota awal, terpakai, tersisa, dan persentase
+- Progress bar quota finite dan status Unlimited
+- Status, masa aktif, model, dan Combo
+- Panduan OpenAI-compatible endpoint
+- Kontak admin dengan Telegram user ID
+- Pesan key dihapus best-effort setelah verifikasi
 
-API key pelanggan:
+</td>
+<td width="50%" valign="top">
 
-- hanya dikirim ke endpoint quota untuk verifikasi;
-- tidak disimpan di SQLite;
-- tidak dicatat pada audit log;
-- tidak dimasukkan ke callback Telegram;
-- tidak ditampilkan kembali dalam hasil;
-- pesan input dihapus best-effort setelah diproses.
+### API key operations
 
-### Panel Administrasi
+- Key otomatis atau custom
+- Provider model dan Combo picker
+- Search, filter, dan pagination
+- Quota, expiry, allowlist, ownership
+- Pause, resume, renew, edit, delete
+- All User Quota dan quick renew
+- CSV snapshot tanpa plaintext key
 
-Pengguna dengan numeric Telegram ID yang telah diotorisasi dapat membuka `/admin` untuk:
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
-- Membuat API key otomatis atau custom
-- Memilih model provider dan Combo melalui inline picker
-- Search, filter, pagination, pause, resume, renew, dan delete key
-- Mengatur quota token, expiry, model allowlist, dan Telegram owner
-- Melihat All User Quota, summary global, filter, sorting, dan quick renew
-- Export laporan quota CSV tanpa plaintext API key
-- Monitoring gateway, provider/model, usage, dan live request refresh
-- Mengelola user dengan role `owner`, `admin`, `operator`, dan `viewer`
-- Mengatur alert quota rendah, expiry dekat, dan gateway offline
-- Melihat audit log dan status sistem
+### Monitoring
+
+- Gateway health dan latency
+- Active, paused, expired, exhausted
+- Usage summary dan request logs
+- Live request auto-refresh
+- Provider/model inventory
+- Low quota, expiry, gateway alerts
+
+</td>
+<td width="50%" valign="top">
+
+### Security & governance
+
+- Numeric Telegram ID authorization
+- Owner, admin, operator, viewer
+- HMAC-signed expiring callbacks
+- Per-user rate limiting
+- Redacted structured logging
+- Audit trail administratif
+- Non-root hardened systemd service
+
+</td>
+</tr>
+</table>
 
 ## Arsitektur
+
+```mermaid
+flowchart LR
+    TG[Telegram Users] --> BOT[Erlandi Proxy Telegram Bot]
+
+    BOT -->|/start · public callbacks| PUBLIC[Customer Portal]
+    BOT -->|/admin · RBAC callbacks| ADMIN[Admin Control]
+
+    PUBLIC -->|POST /api/quota<br/>No CLI token| QUOTA[Public Quota API]
+    ADMIN -->|x-9r-cli-token| ADMINAPI[Admin Gateway APIs]
+
+    QUOTA --> GW[Erlandi Proxy Gateway<br/>127.0.0.1:20128]
+    ADMINAPI --> GW
+
+    BOT --> DB[(Bot SQLite)]
+    DB --> STATE[Users · Sessions · Alerts<br/>Audit · Ownership]
+```
+
+<details>
+<summary><strong>ASCII fallback</strong></summary>
 
 ```text
 Telegram
    │
-   ▼
-Erlandi Proxy Telegram Bot
-   ├── Public handlers ── POST /api/quota
-   │                      tanpa admin token
-   │
-   ├── Admin handlers ─── /api/keys, /api/providers,
-   │                      /api/combos, /api/usage/*
-   │                      dengan x-9r-cli-token
-   │
-   └── SQLite bot database
-       ├── authorized users / roles
-       ├── audit log
-       ├── wizard sessions
-       ├── alerts
-       ├── Telegram key ownership
-       └── renewal request metadata
-
-Erlandi Proxy Gateway
-   └── http://127.0.0.1:20128
+   └── Erlandi Proxy Telegram Bot
+       ├── Public Portal ── POST /api/quota ──┐
+       ├── Admin Control ─ x-9r-cli-token ────┤
+       └── Bot SQLite                         │
+                                             ▼
+                                Erlandi Proxy Gateway
+                                  127.0.0.1:20128
 ```
 
-Bot dan gateway sebaiknya berjalan pada VPS yang sama. Port `20128` tidak perlu dibuka khusus untuk bot karena komunikasi admin menggunakan localhost.
+</details>
 
-## Persyaratan
+### Stack
 
-- Ubuntu 22.04/24.04 atau distribusi Linux dengan systemd
-- Node.js 20 atau lebih baru
-- npm
-- Git
-- Erlandi Proxy/9router aktif pada port `20128`
-- Bot token dari Telegram BotFather
-- Numeric Telegram user ID untuk owner
-- Akses root/sudo untuk instalasi systemd
+| Layer | Teknologi |
+|---|---|
+| Runtime | Node.js 20+ |
+| Language | TypeScript 5.9 |
+| Telegram framework | grammY |
+| Validation | Zod |
+| Database | sql.js / SQLite file |
+| Logging | pino dengan secret redaction |
+| Test | Node built-in test runner |
+| Process manager | systemd |
 
-Cek versi:
+## Quick Start
+
+> **Prasyarat:** gateway Erlandi Proxy sudah aktif pada `127.0.0.1:20128`, Node.js 20+, bot token Telegram, dan numeric owner Telegram ID.
+
+### 1. Clone dan build
+
+```bash
+sudo git clone https://github.com/erlandi-main-api/erlandi-proxy-telegram-bot.git \
+  /opt/erlandi-proxy-telegram-bot
+cd /opt/erlandi-proxy-telegram-bot
+sudo npm ci
+sudo npm test
+sudo npm prune --omit=dev
+```
+
+`npm test` sudah menjalankan build sebelum test suite.
+
+### 2. Siapkan environment
+
+```bash
+sudo install -m 0600 /dev/null /etc/erlandi-proxy-telegram-bot.env
+sudo nano /etc/erlandi-proxy-telegram-bot.env
+```
+
+Minimal configuration:
+
+```dotenv
+TELEGRAM_BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
+OWNER_TELEGRAM_ID="YOUR_NUMERIC_TELEGRAM_ID"
+GATEWAY_URL="http://127.0.0.1:20128"
+PUBLIC_API_BASE_URL="https://api.example.com/v1"
+SUPPORT_CONTACT="@your_support"
+GATEWAY_CLI_TOKEN="YOUR_GATEWAY_CLI_TOKEN"
+CALLBACK_SECRET="YOUR_RANDOM_32_BYTE_SECRET"
+DATABASE_PATH="/opt/erlandi-proxy-telegram-bot/data/bot.sqlite"
+```
+
+Lihat [cara menghasilkan CLI token](#gateway-cli-token) dan [referensi environment lengkap](#environment-reference).
+
+### 3. Buat service user
+
+```bash
+sudo useradd --system \
+  --home /opt/erlandi-proxy-telegram-bot \
+  --shell /usr/sbin/nologin erlandi-bot
+sudo mkdir -p /opt/erlandi-proxy-telegram-bot/data
+sudo chown -R erlandi-bot:erlandi-bot /opt/erlandi-proxy-telegram-bot
+sudo chmod 0700 /opt/erlandi-proxy-telegram-bot/data
+```
+
+### 4. Aktifkan systemd
+
+```bash
+sudo install -m 0644 \
+  deploy/erlandi-proxy-telegram-bot.service \
+  /etc/systemd/system/erlandi-proxy-telegram-bot.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now erlandi-proxy-telegram-bot
+```
+
+### 5. Verifikasi
+
+```bash
+curl http://127.0.0.1:20128/api/health
+sudo systemctl status erlandi-proxy-telegram-bot --no-pager -l
+sudo journalctl -u erlandi-proxy-telegram-bot -n 50 --no-pager
+```
+
+Buka bot:
+
+```text
+/start  → Customer Portal
+/admin  → Authorized Admin Control
+```
+
+## Deployment Production
+
+<details>
+<summary><strong>Persyaratan server dan gateway</strong></summary>
+
+### Persyaratan
+
+- Ubuntu 22.04/24.04 atau Linux dengan systemd
+- Node.js 20+
+- npm dan Git
+- Erlandi Proxy/9router pada port `20128`
+- Bot token dari BotFather
+- Numeric Telegram ID owner
+- Root/sudo untuk systemd
 
 ```bash
 node --version
 npm --version
 git --version
 systemctl --version
-```
-
-Cek gateway:
-
-```bash
 curl http://127.0.0.1:20128/api/health
 ```
 
-Respons yang diharapkan:
+Health response:
 
 ```json
 {"ok":true}
 ```
 
-## Membuat Bot Telegram
+Bot dan gateway idealnya berada pada VPS yang sama. Admin traffic tetap melalui localhost.
 
-1. Buka `@BotFather` di Telegram.
+</details>
+
+<details>
+<summary><strong>Membuat bot melalui BotFather</strong></summary>
+
+1. Buka `@BotFather`.
 2. Jalankan `/newbot`.
-3. Simpan token yang diberikan.
-4. Dapatkan numeric Telegram user ID owner melalui bot seperti `@userinfobot`.
-5. Jangan menggunakan username sebagai authorization ID.
-
-Contoh nilai:
+3. Simpan bot token.
+4. Dapatkan numeric owner ID melalui bot seperti `@userinfobot`.
+5. Jangan menggunakan username untuk authorization.
 
 ```text
 TELEGRAM_BOT_TOKEN=123456789:telegram-token
 OWNER_TELEGRAM_ID=123456789
 ```
 
-Jangan memasukkan nilai asli ke repository atau shell history yang dibagikan.
+Jangan commit token atau memasukkannya ke shell history yang dibagikan.
 
-## Instalasi Source
+</details>
 
-```bash
-sudo mkdir -p /opt/erlandi-proxy-telegram-bot
-sudo git clone https://github.com/erlandi-main-api/erlandi-proxy-telegram-bot.git \
-  /opt/erlandi-proxy-telegram-bot
-cd /opt/erlandi-proxy-telegram-bot
-sudo npm ci
-sudo npm run build
-sudo npm test
-sudo npm prune --omit=dev
-```
+<a id="gateway-cli-token"></a>
+<details>
+<summary><strong>Gateway CLI token</strong></summary>
 
-Jika VPS sangat kecil dan build kehabisan memori, build dapat dilakukan pada mesin lain dengan versi Node kompatibel, lalu direktori `dist/` dikirim ke VPS. Dependency production tetap dipasang menggunakan:
-
-```bash
-npm ci --omit=dev
-```
-
-## Mendapatkan Gateway CLI Token
-
-Endpoint admin gateway dilindungi oleh header:
+Admin gateway dilindungi header:
 
 ```text
 x-9r-cli-token
 ```
 
-Pada instalasi Linux default, gateway menyimpan material token di:
+Default material files:
 
 ```text
 /root/.9router/machine-id
 /root/.9router/auth/cli-secret
 ```
 
-Generate token pada VPS gateway:
+Generate token:
 
 ```bash
 sudo node <<'NODE'
@@ -172,18 +340,22 @@ process.stdout.write(token + '\n');
 NODE
 ```
 
-Jika gateway dijalankan dengan `HOME` atau `DATA_DIR` lain, sesuaikan direktori data tersebut.
+Sesuaikan path jika gateway memakai `HOME` atau `DATA_DIR` berbeda.
 
-Verifikasi token sebelum menjalankan bot:
+Verifikasi:
 
 ```bash
 curl http://127.0.0.1:20128/api/keys \
   -H "x-9r-cli-token: GATEWAY_CLI_TOKEN"
 ```
 
-Respons harus memiliki properti `keys`, bukan `Unauthorized`.
+Respons harus mengandung `keys`, bukan `Unauthorized`.
 
-## Konfigurasi Environment
+</details>
+
+<a id="environment-reference"></a>
+<details>
+<summary><strong>Environment reference</strong></summary>
 
 Generate callback secret:
 
@@ -191,14 +363,7 @@ Generate callback secret:
 openssl rand -hex 32
 ```
 
-Buat environment file:
-
-```bash
-sudo install -m 0600 /dev/null /etc/erlandi-proxy-telegram-bot.env
-sudo nano /etc/erlandi-proxy-telegram-bot.env
-```
-
-Isi:
+Production environment:
 
 ```dotenv
 TELEGRAM_BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
@@ -216,89 +381,80 @@ KEY_MESSAGE_TTL_SECONDS="120"
 LIVE_WATCH_SECONDS="300"
 ```
 
-Pastikan permission:
+| Variable | Wajib | Fungsi |
+|---|---:|---|
+| `TELEGRAM_BOT_TOKEN` | Ya | Token BotFather |
+| `OWNER_TELEGRAM_ID` | Ya | Numeric Telegram ID owner |
+| `GATEWAY_URL` | Ya | Internal gateway URL |
+| `PUBLIC_API_BASE_URL` | Ya | Endpoint yang diberikan ke customer |
+| `SUPPORT_CONTACT` | Ya | Kontak admin/support |
+| `GATEWAY_CLI_TOKEN` | Ya | Service-to-service admin token |
+| `CALLBACK_SECRET` | Ya | HMAC callback secret, minimal 24 karakter |
+| `DATABASE_PATH` | Ya | SQLite path yang writable |
+| `LOG_LEVEL` | Tidak | `debug`, `info`, `warn`, `error` |
+| `KEY_MESSAGE_TTL_SECONDS` | Tidak | TTL pesan sensitif, minimum 30 detik |
+| `LIVE_WATCH_SECONDS` | Tidak | Live watch timeout, 30–1800 detik |
+
+Quote nilai yang mengandung spasi.
 
 ```bash
 sudo chown root:root /etc/erlandi-proxy-telegram-bot.env
 sudo chmod 0600 /etc/erlandi-proxy-telegram-bot.env
 ```
 
-### Referensi Environment
+</details>
 
-| Variable | Wajib | Fungsi |
-|---|---:|---|
-| `TELEGRAM_BOT_TOKEN` | Ya | Token dari BotFather |
-| `OWNER_TELEGRAM_ID` | Ya | Numeric Telegram ID owner |
-| `GATEWAY_URL` | Ya | URL internal gateway, umumnya localhost |
-| `PUBLIC_API_BASE_URL` | Ya | Base URL publik yang diberikan ke pelanggan |
-| `SUPPORT_CONTACT` | Ya | Username/link/pesan kontak admin |
-| `GATEWAY_CLI_TOKEN` | Ya | Token service-to-service gateway |
-| `CALLBACK_SECRET` | Ya | Secret HMAC callback Telegram, minimal 24 karakter |
-| `DATABASE_PATH` | Ya | Lokasi SQLite bot yang writable |
-| `LOG_LEVEL` | Tidak | Level pino: `debug`, `info`, `warn`, `error` |
-| `KEY_MESSAGE_TTL_SECONDS` | Tidak | TTL pesan key sensitif, minimum 30 detik |
-| `LIVE_WATCH_SECONDS` | Tidak | Durasi maksimum live watch, 30–1800 detik |
-
-Quote nilai yang mengandung spasi.
-
-## Membuat User Service
+<details>
+<summary><strong>Non-root user dan systemd</strong></summary>
 
 ```bash
-sudo useradd \
-  --system \
+sudo useradd --system \
   --home /opt/erlandi-proxy-telegram-bot \
-  --shell /usr/sbin/nologin \
-  erlandi-bot
-
+  --shell /usr/sbin/nologin erlandi-bot
 sudo mkdir -p /opt/erlandi-proxy-telegram-bot/data
 sudo chown -R erlandi-bot:erlandi-bot /opt/erlandi-proxy-telegram-bot
 sudo chmod 0700 /opt/erlandi-proxy-telegram-bot/data
 ```
 
-Database akan dibuat otomatis saat startup. Setelah terbentuk:
-
-```bash
-sudo chmod 0600 /opt/erlandi-proxy-telegram-bot/data/bot.sqlite
-sudo chown erlandi-bot:erlandi-bot \
-  /opt/erlandi-proxy-telegram-bot/data/bot.sqlite
-```
-
-## Instalasi systemd
+Install unit:
 
 ```bash
 sudo install -m 0644 \
   deploy/erlandi-proxy-telegram-bot.service \
   /etc/systemd/system/erlandi-proxy-telegram-bot.service
-
 sudo systemctl daemon-reload
 sudo systemctl enable --now erlandi-proxy-telegram-bot
 ```
 
-Cek status:
+Database dibuat otomatis. Kunci permission sesudah startup pertama:
 
 ```bash
-sudo systemctl status erlandi-proxy-telegram-bot --no-pager -l
-sudo journalctl -u erlandi-proxy-telegram-bot -f
+sudo chown erlandi-bot:erlandi-bot \
+  /opt/erlandi-proxy-telegram-bot/data/bot.sqlite
+sudo chmod 0600 \
+  /opt/erlandi-proxy-telegram-bot/data/bot.sqlite
 ```
 
-Log startup sukses:
+Service hardening:
 
-```text
-bot starting
-bot online
-```
+- non-root user;
+- `NoNewPrivileges=true`;
+- `PrivateTmp=true`;
+- `ProtectSystem=strict`;
+- write access hanya pada direktori data.
 
-Service berjalan sebagai user non-root `erlandi-bot`, menggunakan filesystem protection, private temporary directory, dan hanya dapat menulis ke direktori data.
+</details>
 
-## Validasi Deployment
+<details>
+<summary><strong>Validation checklist</strong></summary>
 
-### 1. Gateway
+Gateway health:
 
 ```bash
 curl http://127.0.0.1:20128/api/health
 ```
 
-### 2. Telegram Token
+Telegram identity:
 
 ```bash
 set -a
@@ -307,7 +463,7 @@ set +a
 curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
 ```
 
-### 3. Public Quota Endpoint
+Public quota endpoint:
 
 ```bash
 curl -X POST http://127.0.0.1:20128/api/quota \
@@ -315,27 +471,20 @@ curl -X POST http://127.0.0.1:20128/api/quota \
   -d '{"key":"INVALID_TEST_KEY"}'
 ```
 
-Respons invalid yang normal:
+Expected invalid response:
 
 ```json
 {"error":"API key not found"}
 ```
 
-### 4. Admin Endpoint
+Admin API:
 
 ```bash
 curl http://127.0.0.1:20128/api/keys \
   -H "x-9r-cli-token: ${GATEWAY_CLI_TOKEN}"
 ```
 
-### 5. Telegram UX
-
-- User biasa menjalankan `/start` dan melihat menu publik.
-- User biasa menekan **Cek Kuota API Key**, mengirim key, lalu menerima informasi lengkap.
-- User biasa tidak dapat membuka `/admin`.
-- Owner menjalankan `/admin` dan melihat control panel.
-
-### 6. Permission
+Filesystem permissions:
 
 ```bash
 stat -c '%a %U:%G %n' \
@@ -345,19 +494,62 @@ stat -c '%a %U:%G %n' \
 
 Keduanya seharusnya mode `600`.
 
-## Commands Telegram
+Telegram UX:
 
-| Command | Fungsi |
+- user biasa dapat memakai `/start`;
+- user biasa dapat cek API key;
+- user biasa tidak dapat membuka `/admin`;
+- owner dapat membuka `/admin`.
+
+</details>
+
+## Model Keamanan
+
+| Boundary | Proteksi |
 |---|---|
-| `/start` | Membuka portal pelanggan universal |
-| `/admin` | Membuka panel admin untuk Telegram ID berizin |
-| `/cancel` | Membatalkan proses/wizard aktif |
+| Public quota | Tidak mengirim admin CLI token |
+| Raw customer key | Tidak disimpan DB/audit/callback/output |
+| Admin authorization | Numeric Telegram ID + RBAC |
+| Callback actions | HMAC signature + expiry + vault payload |
+| Abuse prevention | Per-user rate limit |
+| Logs | Structured dan secret-redacted |
+| Environment | Root-owned mode `0600` |
+| Database | Service-owned mode `0600` |
+| Runtime | Non-root hardened systemd |
 
-Commands, short description, dan full description diatur otomatis saat bot startup.
+<details>
+<summary><strong>Security checklist</strong></summary>
 
-## Database
+- [ ] Repository tidak mengandung `.env` atau token
+- [ ] Environment file mode `0600`
+- [ ] Database mode `0600`
+- [ ] Bot berjalan sebagai non-root
+- [ ] Gateway admin hanya melalui localhost/service token
+- [ ] Public handler tidak mengirim `x-9r-cli-token`
+- [ ] Numeric Telegram ID digunakan untuk RBAC
+- [ ] `CALLBACK_SECRET` random dan unik
+- [ ] Gateway tidak diekspos tanpa firewall/reverse proxy
+- [ ] Backup database dan environment disimpan aman
+- [ ] Log diperiksa setiap selesai update
 
-Default production database:
+</details>
+
+## Commands
+
+| Command | Audience | Fungsi |
+|---|---|---|
+| `/start` | Publik | Customer self-service portal |
+| `/admin` | Authorized users | Operations control panel |
+| `/cancel` | Semua user | Membatalkan flow aktif |
+
+Commands, short description, dan full description diatur otomatis saat startup.
+
+## Data & Operations
+
+<details>
+<summary><strong>Database schema dan backup/restore</strong></summary>
+
+Default database:
 
 ```text
 /opt/erlandi-proxy-telegram-bot/data/bot.sqlite
@@ -365,18 +557,16 @@ Default production database:
 
 Tabel utama:
 
-- `users` — numeric Telegram ID, role, dan status
-- `audit` — aktivitas administratif
-- `sessions` — state wizard admin
-- `alerts` — konfigurasi alert
-- `key_owners` — hubungan key ID dan Telegram owner
-- `renewal_requests` — request renewal tanpa raw API key
+- `users` — Telegram ID, role, status;
+- `audit` — aktivitas admin;
+- `sessions` — wizard state admin;
+- `alerts` — operational alerts;
+- `key_owners` — key ID dan Telegram owner;
+- `renewal_requests` — metadata renewal tanpa raw key.
 
-Owner dari `OWNER_TELEGRAM_ID` dibuat otomatis saat database pertama kali dibuka.
+Owner dibuat otomatis dari `OWNER_TELEGRAM_ID`.
 
-## Backup
-
-### Backup Database
+Backup:
 
 ```bash
 sudo systemctl stop erlandi-proxy-telegram-bot
@@ -386,7 +576,7 @@ sudo install -m 0600 \
 sudo systemctl start erlandi-proxy-telegram-bot
 ```
 
-### Restore Database
+Restore:
 
 ```bash
 sudo systemctl stop erlandi-proxy-telegram-bot
@@ -399,15 +589,19 @@ sudo chmod 0600 \
 sudo systemctl start erlandi-proxy-telegram-bot
 ```
 
-Backup environment secara terpisah ke penyimpanan rahasia. Jangan memasukkannya ke Git.
+Backup environment secara terpisah ke secret storage. Jangan masukkan ke Git.
 
-## Update Deployment
+</details>
+
+<details>
+<summary><strong>Update dan rollback</strong></summary>
+
+Update:
 
 ```bash
 cd /opt/erlandi-proxy-telegram-bot
 sudo -u erlandi-bot git pull --ff-only origin main
 sudo npm ci
-sudo npm run build
 sudo npm test
 sudo npm prune --omit=dev
 sudo chown -R erlandi-bot:erlandi-bot \
@@ -416,64 +610,60 @@ sudo systemctl restart erlandi-proxy-telegram-bot
 sudo systemctl status erlandi-proxy-telegram-bot --no-pager
 ```
 
-Untuk mengurangi downtime, build dan test dapat dilakukan sebelum restart.
-
-## Rollback
-
-Sebelum update:
+Catat commit dan backup build sebelum update:
 
 ```bash
-cd /opt/erlandi-proxy-telegram-bot
 git rev-parse HEAD
 sudo cp -a dist "/root/erlandi-bot-dist-$(date +%Y%m%d-%H%M%S)"
 ```
 
-Rollback source:
+Rollback:
 
 ```bash
 cd /opt/erlandi-proxy-telegram-bot
 sudo -u erlandi-bot git checkout COMMIT_YANG_STABIL
 sudo npm ci
-sudo npm run build
+sudo npm test
 sudo npm prune --omit=dev
 sudo systemctl restart erlandi-proxy-telegram-bot
 ```
 
-Jangan gunakan `git reset --hard` jika ada perubahan lokal yang belum diamankan.
+Jangan gunakan `git reset --hard` bila ada perubahan lokal yang belum diamankan.
+
+</details>
 
 ## Troubleshooting
 
-### Service restart loop
+<details open>
+<summary><strong>Diagnosis cepat</strong></summary>
 
 ```bash
+sudo systemctl is-active erlandi-proxy-telegram-bot
 sudo journalctl -u erlandi-proxy-telegram-bot -n 200 --no-pager
+curl http://127.0.0.1:20128/api/health
 ```
 
-Penyebab umum:
+| Gejala | Periksa |
+|---|---|
+| Restart loop | Env wajib, `dist`, node_modules, writable DB |
+| Bot diam | Bot token, duplicate polling instance, journal |
+| `/admin` ditolak | Numeric owner ID dan database path |
+| Public quota gagal | Endpoint `/api/quota` dan SaaS key store |
+| Admin Unauthorized | Regenerate `GATEWAY_CLI_TOKEN` |
+| Build OOM | Build di mesin lain atau tambah swap |
 
-- environment variable wajib kosong;
-- format environment salah karena nilai dengan spasi tidak di-quote;
-- `dist/src/index.js` belum dibuild;
-- `node_modules` belum terpasang;
-- database directory tidak writable.
+</details>
 
-### Bot tidak merespons
+<details>
+<summary><strong>Perintah diagnosis detail</strong></summary>
+
+Bot identity:
 
 ```bash
 curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
-sudo systemctl is-active erlandi-proxy-telegram-bot
-sudo journalctl -u erlandi-proxy-telegram-bot -f
 ```
 
-Pastikan tidak ada instance bot lain yang memakai token sama dengan long polling.
-
-### `/admin` ditolak untuk owner
-
-- Pastikan `OWNER_TELEGRAM_ID` adalah numeric user ID yang benar.
-- Pastikan bot menggunakan database yang sama dengan `DATABASE_PATH`.
-- Restart service setelah mengubah environment.
-
-### Public quota selalu gagal
+Public quota:
 
 ```bash
 curl -X POST "${GATEWAY_URL}/api/quota" \
@@ -481,31 +671,22 @@ curl -X POST "${GATEWAY_URL}/api/quota" \
   -d '{"key":"VALID_API_KEY"}'
 ```
 
-Periksa apakah gateway custom memiliki endpoint `/api/quota` dan key tercatat dalam SaaS API key store.
+Logs realtime:
 
-### Admin API Unauthorized
+```bash
+sudo journalctl -u erlandi-proxy-telegram-bot -f
+```
 
-Generate ulang CLI token dari data directory gateway, lalu perbarui `GATEWAY_CLI_TOKEN` dan restart bot.
+Pastikan tidak ada instance lain yang memakai token Telegram sama dengan long polling.
 
-### Out of memory saat build
+Jika build kehabisan memori, transfer hasil `dist/` dari mesin build dan jalankan `npm ci --omit=dev` pada VPS.
 
-Build di mesin lain lalu transfer `dist/`, atau tambah swap sementara. Runtime production hanya membutuhkan dependency production dan direktori `dist`.
-
-## Security Checklist
-
-- [ ] Repository tidak mengandung `.env` atau token
-- [ ] Environment file mode `0600`
-- [ ] Database mode `0600`
-- [ ] Bot berjalan sebagai non-root
-- [ ] Gateway admin hanya diakses melalui localhost/service token
-- [ ] Public handler tidak mengirim `x-9r-cli-token`
-- [ ] Numeric Telegram ID digunakan untuk RBAC
-- [ ] `CALLBACK_SECRET` random dan unik per deployment
-- [ ] Port gateway tidak diekspos tanpa reverse proxy/firewall yang sesuai
-- [ ] Backup database dan environment disimpan aman
-- [ ] Log diperiksa setelah update
+</details>
 
 ## Development
+
+<details>
+<summary><strong>Local development dan testing</strong></summary>
 
 ```bash
 npm ci
@@ -514,25 +695,31 @@ npm test
 npm run dev
 ```
 
-Test menggunakan Node built-in test runner dan mencakup:
+Test suite mencakup:
 
-- RBAC
-- signed callback dan long payload vault
-- rate limiting
-- gateway admin header
-- isolasi public quota/health tanpa CLI token
-- provider/model dan Combo mapping
-- SQLite persistence
-- renewal request tanpa raw key
-- quota summary/filter/sort/CSV
-- quota percentage dan progress bar
+- RBAC;
+- signed callbacks dan long payload vault;
+- rate limiting;
+- admin gateway header;
+- public quota/health tanpa CLI token;
+- provider/model dan Combo mapping;
+- SQLite persistence;
+- renewal metadata tanpa raw key;
+- quota summary/filter/sort/CSV;
+- quota percentage dan progress bar.
 
-## Repository
+Untuk VPS kecil, lakukan build/test pada CI atau workstation lalu deploy `dist/` dan production dependencies.
 
-```text
-https://github.com/erlandi-main-api/erlandi-proxy-telegram-bot
-```
+</details>
 
-## License
+---
 
-Gunakan sesuai kebijakan dan lisensi proyek Erlandi Proxy yang terkait.
+<div align="center">
+
+**[Erlandi Proxy Telegram Bot](https://github.com/erlandi-main-api/erlandi-proxy-telegram-bot)**
+
+Built for secure, practical AI gateway operations.
+
+<sub>Jangan pernah commit token Telegram, gateway token, callback secret, atau customer API key.</sub>
+
+</div>
