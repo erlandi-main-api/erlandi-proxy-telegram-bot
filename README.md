@@ -36,9 +36,24 @@ CALLBACK_SECRET
 
 `OWNER_TELEGRAM_ID` must be a numeric Telegram user ID. Usernames are never trusted for authorization.
 
+## Public Customer Portal
+
+`/start` opens a universal self-service portal for every Telegram user. No administrator approval is required to:
+
+- Check API quota, usage, status, expiration, and allowed models/Combos
+- View the OpenAI-compatible API configuration
+- Submit a renewal request for administrator review
+- View service information and support guidance
+
+Customer API keys are validated through the public quota endpoint, never stored in SQLite, and never returned in bot output. Renewal requests store only an HMAC fingerprint and account metadata.
+
+## Administration
+
+`/admin` opens the restricted operations panel for authorized numeric Telegram IDs. Administrative features remain protected by role-based permissions and signed callback actions.
+
 ## Inline UX
 
-`/start` and `/menu` open the control dashboard. Navigation and actions use edited inline messages. Text input is used only for names, custom keys, quota, expiry, owner IDs, and search.
+`/start` opens the public customer portal. `/admin` opens the authorized operations dashboard. Navigation and actions use edited inline messages. Text input is used only where required by a guided process.
 
 ## Deployment
 

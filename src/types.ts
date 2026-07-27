@@ -5,4 +5,6 @@ export interface AppUser { telegramId: number; role: Role; active: boolean; disp
 export interface ApiKeyRecord { id: string; name: string; key?: string; isActive?: boolean; models?: string[]; tokenBalance?: number | null; tokensUsed?: number; unlimited?: boolean; expiresAt?: string | null; createdAt?: string; updatedAt?: string; status?: string; }
 export interface ModelOption { id: string; name: string; groupId: string; groupName: string; isCombo?: boolean; memberCount?: number; }
 export interface ModelGroup { id: string; name: string; models: ModelOption[]; }
+export interface PublicQuota { name: string; status: string; models: string[]; allModels: boolean; tokenBalance: number|null; unlimited: boolean; tokensUsed: number; expiresAt: string|null; }
+export interface PublicSession { step: "quotaKey"|"renewKey"|"renewTokens"|"renewDays"; keyName?: string; keyFingerprint?: string; tokens?: number; createdAt: number; }
 export interface WizardState { step: "name" | "keyMode" | "customKey" | "models" | "modelSearch" | "customModel" | "quota" | "expiry" | "owner" | "review"; operation?: "create" | "editModels" | "renew" | "search" | "addUser"; keyId?: string; name?: string; customKey?: string; models: string[]; quota?: string; expiry?: string; ownerId?: number; modelGroup?: string; modelPage?: number; modelSearch?: string; }

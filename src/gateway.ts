@@ -1,10 +1,12 @@
 import { z } from "zod";
-import type { ApiKeyRecord, ModelGroup } from "./types.js";
+import type { ApiKeyRecord, ModelGroup, PublicQuota } from "./types.js";
 
 export class GatewayError extends Error { constructor(message:string, readonly status:number){super(message);} }
 export class GatewayClient {
   constructor(private baseUrl:string, private token:string, private timeoutMs=10_000){this.baseUrl=baseUrl.replace(/\/$/,"");}
   private async request<T>(path:string, init:RequestInit={}):Promise<T>{const signal=AbortSignal.timeout(this.timeoutMs);const res=await fetch(this.baseUrl+path,{...init,signal,headers:{"content-type":"application/json","x-9r-cli-token":this.token,...init.headers}});const data=await res.json().catch(()=>({}));if(!res.ok)throw new GatewayError(String(data.error?.message||data.error||data.message||`Gateway error ${res.status}`),res.status);return data as T;}
+  async publicQuota(key:string):Promise<PublicQuota>{const res=await fetch(this.baseUrl+"/api/quota",{method:"POST",signal:AbortSignal.timeout(this.timeoutMs),headers:{"content-type":"application/json"},body:JSON.stringify({key})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new GatewayError(String(data.error||"Unable to check API key"),res.status);return z.object({name:z.string(),status:z.string(),models:z.array(z.string()).default([]),allModels:z.boolean(),tokenBalance:z.number().nullable(),unlimited:z.boolean(),tokensUsed:z.number(),expiresAt:z.string().nullable()}).parse(data);}
+  async publicHealth():Promise<{ok:boolean}>{const res=await fetch(this.baseUrl+"/api/health",{signal:AbortSignal.timeout(this.timeoutMs)});const data=await res.json().catch(()=>({}));if(!res.ok)throw new GatewayError("Service health is unavailable",res.status);return z.object({ok:z.boolean()}).parse(data);}
   health(){return this.request<{ok:boolean}>("/api/health");}
   async listKeys():Promise<ApiKeyRecord[]>{const d=await this.request<{keys:ApiKeyRecord[]}>("/api/keys");return Array.isArray(d.keys)?d.keys:[];}
   async createKey(input:{name:string;key?:string;models?:string;tokenQuota?:string;expiresInDays?:string}):Promise<ApiKeyRecord>{return this.request<ApiKeyRecord>("/api/keys",{method:"POST",body:JSON.stringify(input)});}

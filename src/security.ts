@@ -9,6 +9,8 @@ const rolePermissions: Record<Role, Permission[]> = {
 };
 export const can = (role: Role, permission: Permission) => rolePermissions[role].includes(permission);
 
+export const keyFingerprint=(secret:string,key:string)=>createHmac("sha256",secret).update(key).digest("hex").slice(0,16);
+
 export class CallbackSigner {
   private payloads = new Map<string,{value:string;expiry:number}>();
   constructor(private readonly secret: string, private readonly ttlSeconds = 900) {}
