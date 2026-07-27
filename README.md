@@ -10,6 +10,8 @@ Secure Telegram control panel for Erlandi Proxy, built around inline keyboards.
 - Guided key creation with automatic/custom key, provider models, LLM Combos, quota, expiry, and Telegram ownership
 - Provider/model overview, gateway health, usage summary, live-request refresh
 - User administration, audit log, quota/expiry/gateway alerts
+- All User Quota dashboard with global totals, status filters, balance/usage/expiry sorting, pagination, and quick renew
+- Secure CSV quota export without plaintext API key secrets
 - SQLite persistence and redacted structured logs
 - Authenticated localhost connection to Erlandi Proxy using `x-9r-cli-token`
 
