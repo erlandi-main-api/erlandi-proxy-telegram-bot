@@ -23,7 +23,7 @@ export const DEFAULT_PUBLIC_PORTAL_CONFIG:PublicPortalConfig={
   [{id:"config",label:"Panduan Penggunaan",kind:"page",target:"guide"},{id:"support",label:"Hubungi Admin",kind:"page",target:"support"}]
  ],
  pages:[
-  {id:"guide",title:"Panduan Penggunaan API",body:"Base URL:\n{base_url}\n\nGunakan API key Anda pada aplikasi yang mendukung API OpenAI."},
+  {id:"guide",title:"Panduan Penggunaan API",body:"Base URL\n{base_url}\n\nContoh request:\ncurl {base_url}/chat/completions \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\":\"YOUR_MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Halo\"}]}'\n\nGanti YOUR_API_KEY dengan API key Anda dan YOUR_MODEL dengan model yang tersedia pada hasil cek kuota."},
   {id:"support",title:"Hubungi Admin",body:"{support}\n\nTelegram User ID Anda: {user_id}"}
  ]
 };
