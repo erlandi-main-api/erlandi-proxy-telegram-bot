@@ -7,7 +7,7 @@ test("default portal preserves the existing public start menu",()=>{
  assert.equal(parsed.custom,false);
  assert.equal(parsed.config.welcomeText,DEFAULT_PUBLIC_PORTAL_CONFIG.welcomeText);
  assert.deepEqual(parsed.config.homeRows.flat().map(button=>button.label),["Cek Kuota API Key","Panduan Penggunaan","Hubungi Admin"]);
- assert.deepEqual(parsed.config.homeRows.flat().map(publicButtonAction),[{action:"pubquota"},{action:"pubconfig"},{action:"pubsupport"}]);
+ assert.deepEqual(parsed.config.homeRows.flat().map(publicButtonAction),[{action:"pubquota"},{action:"pubpage",payload:"guide"},{action:"pubpage",payload:"support"}]);
 });
 
 test("portal accepts custom pages and safe URLs",()=>{
