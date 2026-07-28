@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_
 CREATE TABLE IF NOT EXISTS sessions(telegram_id INTEGER PRIMARY KEY, state TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, threshold REAL, enabled INTEGER NOT NULL DEFAULT 1, chat_id INTEGER NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS key_owners(key_id TEXT PRIMARY KEY, telegram_id INTEGER NOT NULL, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS renewal_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id INTEGER NOT NULL, key_name TEXT NOT NULL, key_fingerprint TEXT NOT NULL, tokens INTEGER NOT NULL, days INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`);
+CREATE TABLE IF NOT EXISTS renewal_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id INTEGER NOT NULL, key_name TEXT NOT NULL, key_fingerprint TEXT NOT NULL, tokens INTEGER NOT NULL, days INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by INTEGER);`);
     store.db.run("INSERT OR IGNORE INTO users(telegram_id,role,active,created_at) VALUES(?,?,1,?)",[ownerId,"owner",new Date().toISOString()]); await store.flush(); return store;
   }
   private rows<T>(sql:string, params:unknown[]=[]):T[]{const result=this.db.exec(sql,params as never[])[0];if(!result)return[];return result.values.map(row=>Object.fromEntries(result.columns.map((c,i)=>[c,row[i]])) as T)}
@@ -36,5 +37,8 @@ CREATE TABLE IF NOT EXISTS renewal_requests(id INTEGER PRIMARY KEY AUTOINCREMENT
   listRenewalRequests(status="pending",limit=20){return this.rows<Record<string,unknown>>("SELECT * FROM renewal_requests WHERE status=? ORDER BY id DESC LIMIT ?",[status,limit]);}
   getRenewalRequest(id:number){return this.rows<Record<string,unknown>>("SELECT * FROM renewal_requests WHERE id=?",[id])[0]||null;}
   async updateRenewalRequest(id:number,status:"reviewed"|"rejected"){this.db.run("UPDATE renewal_requests SET status=?,updated_at=? WHERE id=?",[status,new Date().toISOString(),id]);await this.flush();}
+  getSetting(key:string):string|null{return this.rows<{value:string}>("SELECT value FROM settings WHERE key=?",[key])[0]?.value||null;}
+  async setSetting(key:string,value:string,userId:number){this.db.run("INSERT INTO settings(key,value,updated_at,updated_by) VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at,updated_by=excluded.updated_by",[key,value,new Date().toISOString(),userId]);await this.flush();}
+  async deleteSetting(key:string){this.db.run("DELETE FROM settings WHERE key=?",[key]);await this.flush();}
   async flush(){await mkdir(dirname(this.path),{recursive:true});await writeFile(this.path,this.db.export());}
 }

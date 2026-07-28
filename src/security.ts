@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Permission, Role } from "./types.js";
 
 const rolePermissions: Record<Role, Permission[]> = {
-  owner: ["keys.read","keys.write","keys.delete","monitor.read","users.manage","alerts.manage","audit.read","system.read"],
+  owner: ["keys.read","keys.write","keys.delete","monitor.read","users.manage","alerts.manage","audit.read","system.read","portal.manage"],
   admin: ["keys.read","keys.write","keys.delete","monitor.read","users.manage","alerts.manage","audit.read","system.read"],
   operator: ["keys.read","keys.write","monitor.read","system.read"],
   viewer: ["keys.read","monitor.read","system.read"]
